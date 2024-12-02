@@ -12,6 +12,7 @@
 #include "btstack_event.h"
 #include "pico/cyw43_arch.h"
 #include "picow_bt_example_common.h"
+#include "temp_sense.h"
 
 #ifndef RUN_FREERTOS_ON_CORE
 #define RUN_FREERTOS_ON_CORE 0
@@ -19,6 +20,8 @@
 
 #define TEST_TASK_PRIORITY				( tskIDLE_PRIORITY + 2UL )
 #define BLINK_TASK_PRIORITY				( tskIDLE_PRIORITY + 1UL )
+
+uint8_t num_connections = 0;
 
 int btstack_main(int argc, const char * argv[]);
 static btstack_packet_callback_registration_t hci_event_callback_registration;
@@ -34,6 +37,16 @@ static void packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packe
             gap_local_bd_addr(local_addr);
             printf("BTstack up and running on %s.\n", bd_addr_to_str(local_addr));
             break;
+        case BTSTACK_EVENT_NR_CONNECTIONS_CHANGED:
+            int new_num_connections = btstack_event_nr_connections_changed_get_number_connections(packet);
+            while (new_num_connections > num_connections) {
+                printf("Device connected.\n");
+                num_connections++;
+            }
+            while (new_num_connections < num_connections) {
+                printf("Device disconnected.\n");
+                num_connections--;
+            }
         default:
             break;
     }
@@ -41,6 +54,7 @@ static void packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packe
 
 void main_task(__unused void *params)
 {
+    vTaskDelay(4000); // Give TTY time to attach
     // initialize CYW43 driver architecture
     // (will enable BT if/because CYW43_ENABLE_BLUETOOTH == 1)
     if (cyw43_arch_init()) {
@@ -60,6 +74,7 @@ void main_task(__unused void *params)
 int main()
 {
     stdio_init_all();
+    temperature_setup();
     TaskHandle_t task;
     xTaskCreate(main_task, "TestMainThread", 1024, NULL, TEST_TASK_PRIORITY, &task);
     vTaskStartScheduler();
